@@ -1,47 +1,49 @@
-# RedactVision - Video Privacy & Phone Number Redaction Studio
+# RedactVision - Video Phone Number Redaction & YouTube Trimmer Studio
 
-**RedactVision** is a modern, in-browser video editor built with **React**, **TypeScript**, and **Tailwind CSS**, designed specifically for redacting sensitive Personally Identifiable Information (PII)—focusing on **telephone numbers** displayed in videos.
+**RedactVision** is a full-featured video editing and trimming application built with **React**, **TypeScript**, **Tailwind CSS**, and an **Express / yt-dlp / FFmpeg** backend.
 
-All processing, optical character recognition (OCR), and video rendering run **100% client-side in the browser**—ensuring confidential video footage never leaves your machine.
-
----
-
-## 🌟 Key Features
-
-### 1. Smart Phone Number Detection (AI / OCR Engine)
-- Integrated with client-side OCR (**Tesseract.js**) and phone pattern matchers (US/Canada, UK/Europe, international E.164 formats, and custom sequences).
-- **Scan Current Frame**: Instantly identifies visible phone numbers on the active frame, calculates their bounding box coordinates, and generates redaction masks with 1 click.
-- **Scan Entire Video**: Automatically samples video keyframes, aggregates all detected telephone numbers, and provides a **"Redact All"** button.
-
-### 2. Multi-Style Redaction Engine
-- **Blur**: Gaussian-style multi-pass blur with adjustable blur radius (6px to 40px).
-- **Pixelate / Mosaic**: True pixelation downscaling and upscaling with custom block sizes.
-- **Solid Blackout Bar**: Classic FBI / confidential document blackout bar.
-
-### 3. Interactive Video Preview & Mask Editor
-- Direct canvas manipulation: drag redaction boxes to reposition or use the 8 resize handles.
-- **Draw Redaction Area**: Click and drag anywhere directly on the video canvas to draw custom redaction boxes.
-- Real-time live preview of all burnt-in redactions as the video plays or scrubs.
-
-### 4. Precision Multi-Track Timeline
-- Millisecond-accurate timecode scrubbing (`00:03.25 / 00:10.00`).
-- Interactive redaction tracks: each mask is displayed as a colored clip showing its active start and end time.
-- **Trim Handles**: Drag clip start/end handles to fine-tune the redaction duration.
-- **In/Out Point Hotkeys**: Press `I` to set clip start time to playhead, press `O` to set clip end time to playhead.
-- Playback speeds (0.5×, 1×, 1.5×, 2×) and audio mute controls.
-
-### 5. Client-Side Video Export
-- Re-encodes the video with redactions permanently burnt into the video frames.
-- Preserves audio tracks.
-- Live progress modal showing frame count and percentage.
-- Exports to downloadable `.webm` / `.mp4`.
-
-### 6. Built-in Sample Video Generator
-- No video on hand? Click **"Load Sample Video"** to dynamically generate a 1280×720 compliance test video containing realistic customer support phone numbers, escrow contact numbers, and international hotline numbers.
+It brings together:
+1. **Interactive Video Editing & Phone Number Redaction** (client-side OCR, automatic phone detection, blur, pixelate, and blackout masks).
+2. **Local Video Trimming** (trim start/end handles, loop preview, and export only the trimmed range with redactions).
+3. **YouTube Video Trimming & Downloading** (URL ingestion, synchronized YouTube player, dual-range timeline slider, sub-second precision frame adjusters, multi-format export, and direct bridge to Redactor Studio).
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## 🌟 Key Capabilities
+
+### 1. Trimming Locally Uploaded Videos
+- **Interactive Video Trim Track**: Dual draggable start and end cut handles directly on the timeline track.
+- **One-Click Cue Markers**:
+  - `[Start: Xs]`: Sets the clip start point to the current playhead position.
+  - `[End: Ys]`: Sets the clip end point to the current playhead position.
+  - `Loop Trim`: Continuously loops playback within the selected cut interval.
+- **Export Scope**: In the Export dialog, choose between:
+  - **Trimmed Cut Only**: Exports only the trimmed segment with all active redactions baked in.
+  - **Full Video**: Exports the complete video.
+
+### 2. Trimming YouTube Videos
+- **Instant YouTube Ingestion**: Input any YouTube video link (`watch?v=...`, `youtu.be/...`, or YouTube Shorts) or click sample chips.
+- **Synchronized YouTube Player**: Built-in player with live time synchronization and cue markers (`Set as Start`, `Set as End`, `Loop Preview`).
+- **Dual-Range Timeline Trimmer**: Visual cut window with sub-second micro adjusters (`-1s`, `-0.1s`, `+0.1s`, `+1s`) and direct timestamp inputs.
+- **Multi-Format Export**:
+  - **MP4 Video** (1080p, 720p, 480p, 360p, or Best Quality)
+  - **MP3 Audio** (audio-only extraction)
+  - **GIF Animation** (looping animated GIF)
+  - **WebM Video** (optimized web video)
+- **Direct Bridge to Redactor Studio**: After trimming (or from the session history), click **"Open in Redactor Studio"** to load the trimmed YouTube clip straight into the canvas editor to detect and redact phone numbers!
+
+### 3. Smart Phone Number Redaction (AI / OCR Engine)
+- Integrated with client-side OCR (**Tesseract.js**) to detect phone numbers across keyframes.
+- **Scan Current Frame**: Identifies telephone numbers on the active frame and creates bounding boxes.
+- **Scan Entire Video**: Samples keyframes across the video and gives a **"Redact All"** button.
+- **Redaction Styles**:
+  - **Blur**: Gaussian blur with adjustable radius (6px to 40px).
+  - **Pixelate / Mosaic**: Downscaled pixel blocks with custom sizing.
+  - **Solid Blackout Bar**: Classic FBI-style confidential redaction.
+
+---
+
+## ⌨️ Keyboard Shortcuts (Editor Mode)
 
 | Shortcut | Action |
 |---|---|
@@ -54,25 +56,23 @@ All processing, optical character recognition (OCR), and video rendering run **1
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Running the App
 
-### Prerequisites
-- Node.js (v18+ recommended)
-- npm
-
-### Development
+### Start Both Frontend and Backend (Recommended)
 ```bash
-# Install dependencies
-npm install
+npm start
+```
+This runs concurrently:
+- **Backend API**: `http://localhost:5000` (yt-dlp and FFmpeg discovery)
+- **Frontend App**: `http://localhost:5173` (Vite + React)
 
-# Start Vite dev server
+### Or Run Separately
+```bash
+# Terminal 1: Backend server
+npm run server
+
+# Terminal 2: Vite dev client
 npm run dev
 ```
 
-Open `http://localhost:5173/` in your browser.
-
-### Production Build
-```bash
-npm run build
-npm run preview
-```
+Visit **[http://localhost:5173/](http://localhost:5173/)** in your browser.
