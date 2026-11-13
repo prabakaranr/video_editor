@@ -4,11 +4,15 @@ import { VideoPlayer } from './components/VideoPlayer';
 import { Timeline } from './components/Timeline';
 import { RedactionPanel } from './components/RedactionPanel';
 import { ExportModal } from './components/ExportModal';
+import { YoutubeTrimmerView } from './components/youtube/YoutubeTrimmerView';
 import type { RedactionMask, VideoInfo } from './types/editor';
 import { generateDemoVideo } from './utils/demoVideoGenerator';
-import { exportRedactedVideo, type ExportProgress } from './utils/videoExporter';
+import { exportRedactedVideo, type ExportProgress, type TrimRange } from './utils/videoExporter';
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<'editor' | 'youtube'>('editor');
+
+  // Video State
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -16,6 +20,10 @@ export function App() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isDrawMode, setIsDrawMode] = useState(false);
+
+  // Local Video Trim Range State
+  const [trimRange, setTrimRange] = useState<TrimRange>({ start: 0, end: 10 });
+  const [isLoopingTrim, setIsLoopingTrim] = useState(false);
 
   // Redaction Masks State
   const [masks, setMasks] = useState<RedactionMask[]>([]);
@@ -46,19 +54,56 @@ export function App() {
     video.preload = 'metadata';
 
     video.onloadedmetadata = () => {
+      const dur = video.duration || 10;
       setVideoInfo({
         name: file.name,
         url,
-        duration: video.duration || 10,
+        duration: dur,
         width: video.videoWidth || 1280,
         height: video.videoHeight || 720,
         size: file.size,
       });
-      setDuration(video.duration || 10);
+      setDuration(dur);
       setCurrentTime(0);
+      setTrimRange({ start: 0, end: dur });
       setMasks([]);
       setSelectedMaskId(null);
+      setActiveTab('editor');
     };
+  };
+
+  // Handle Loading Trimmed YouTube Clip directly into Redactor Studio
+  const handleSendYoutubeClipToRedactor = async (downloadUrl: string, filename: string) => {
+    try {
+      const response = await fetch(downloadUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const video = document.createElement('video');
+      video.src = url;
+      video.preload = 'metadata';
+
+      video.onloadedmetadata = () => {
+        const dur = video.duration || 10;
+        setVideoInfo({
+          name: filename,
+          url,
+          duration: dur,
+          width: video.videoWidth || 1280,
+          height: video.videoHeight || 720,
+          size: blob.size,
+        });
+        setDuration(dur);
+        setCurrentTime(0);
+        setTrimRange({ start: 0, end: dur });
+        setMasks([]);
+        setSelectedMaskId(null);
+        setActiveTab('editor');
+      };
+    } catch (err) {
+      console.error('Failed to load YouTube clip into editor:', err);
+      alert('Could not load the trimmed video into the editor. Try downloading directly.');
+    }
   };
 
   // Handle Generate Demo Video
@@ -79,8 +124,9 @@ export function App() {
       });
       setDuration(demo.duration);
       setCurrentTime(0);
+      setTrimRange({ start: 0, end: demo.duration });
 
-      // Pre-populate sample phone redaction masks as an immediate demonstration!
+      // Pre-populate sample phone redaction masks as demonstration
       setMasks([
         {
           id: `mask-demo-1`,
@@ -123,6 +169,7 @@ export function App() {
         },
       ]);
       setSelectedMaskId('mask-demo-1');
+      setActiveTab('editor');
     } catch (err) {
       console.error('Failed to generate demo video', err);
     } finally {
@@ -186,10 +233,10 @@ export function App() {
     setSelectedMaskId((prev) => (prev === id ? null : prev));
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (active in Editor mode)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input or textarea
+      if (activeTab !== 'editor') return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -219,18 +266,29 @@ export function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTime, handleDeleteMask, handleSeek, handleTogglePlay, handleUpdateMask, selectedMaskId]);
+  }, [
+    activeTab,
+    currentTime,
+    handleDeleteMask,
+    handleSeek,
+    handleTogglePlay,
+    handleUpdateMask,
+    selectedMaskId,
+  ]);
 
   // Export handling
-  const handleStartExport = async () => {
+  const handleStartExport = async (scopeTrimRange?: TrimRange) => {
     if (!videoRef.current) return;
     try {
       setIsExporting(true);
       setExportedResult(null);
 
-      const result = await exportRedactedVideo(videoRef.current, masks, (prog) => {
-        setExportProgress(prog);
-      });
+      const result = await exportRedactedVideo(
+        videoRef.current,
+        masks,
+        (prog) => setExportProgress(prog),
+        scopeTrimRange
+      );
 
       setExportedResult(result);
     } catch (err) {
@@ -253,20 +311,37 @@ export function App() {
           muted={isMuted}
           onTimeUpdate={() => {
             if (videoRef.current) {
-              setCurrentTime(videoRef.current.currentTime);
+              const cur = videoRef.current.currentTime;
+              setCurrentTime(cur);
+
+              // Handle trim loop playback
+              if (isLoopingTrim && cur >= trimRange.end) {
+                videoRef.current.currentTime = trimRange.start;
+              }
             }
           }}
           onLoadedMetadata={() => {
             if (videoRef.current) {
-              setDuration(videoRef.current.duration || 10);
+              const dur = videoRef.current.duration || 10;
+              setDuration(dur);
+              setTrimRange((prev) => ({ start: prev.start, end: Math.min(dur, prev.end || dur) }));
             }
           }}
-          onEnded={() => setIsPlaying(false)}
+          onEnded={() => {
+            if (isLoopingTrim && videoRef.current) {
+              videoRef.current.currentTime = trimRange.start;
+              videoRef.current.play().catch(() => {});
+            } else {
+              setIsPlaying(false);
+            }
+          }}
         />
       )}
 
-      {/* Top Application Navbar */}
+      {/* Top Application Navbar with Mode Switcher */}
       <Navbar
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
         videoInfo={videoInfo}
         onUploadVideo={handleUploadVideo}
         onLoadDemo={handleLoadDemo}
@@ -276,59 +351,81 @@ export function App() {
         hasRedactions={masks.length > 0}
       />
 
-      {/* Main Workspace (Preview Canvas + Redaction Tools) */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Center Video Canvas Area */}
-        <VideoPlayer
-          videoInfo={videoInfo}
-          videoRef={videoRef}
-          canvasRef={canvasRef}
-          masks={masks}
-          selectedMaskId={selectedMaskId}
-          onSelectMask={setSelectedMaskId}
-          onUpdateMask={handleUpdateMask}
-          onCreateMask={handleCreateMask}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-          onTogglePlay={handleTogglePlay}
-          isDrawMode={isDrawMode}
-          setIsDrawMode={setIsDrawMode}
-        />
+      {/* Tab 1: Video Editor & Redactor Mode */}
+      {activeTab === 'editor' && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Main Workspace (Preview Canvas + Redaction Tools) */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Center Video Canvas Area */}
+            <VideoPlayer
+              videoInfo={videoInfo}
+              videoRef={videoRef}
+              canvasRef={canvasRef}
+              masks={masks}
+              selectedMaskId={selectedMaskId}
+              onSelectMask={setSelectedMaskId}
+              onUpdateMask={handleUpdateMask}
+              onCreateMask={handleCreateMask}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              onTogglePlay={handleTogglePlay}
+              isDrawMode={isDrawMode}
+              setIsDrawMode={setIsDrawMode}
+            />
 
-        {/* Right Redaction Sidebar */}
-        <RedactionPanel
-          videoRef={videoRef}
-          duration={duration}
-          currentTime={currentTime}
-          masks={masks}
-          selectedMaskId={selectedMaskId}
-          onSelectMask={setSelectedMaskId}
-          onUpdateMask={handleUpdateMask}
-          onCreateMask={handleCreateMask}
-          onDeleteMask={handleDeleteMask}
-          onSeek={handleSeek}
-        />
-      </div>
+            {/* Right Redaction Sidebar */}
+            <RedactionPanel
+              videoRef={videoRef}
+              duration={duration}
+              currentTime={currentTime}
+              masks={masks}
+              selectedMaskId={selectedMaskId}
+              onSelectMask={setSelectedMaskId}
+              onUpdateMask={handleUpdateMask}
+              onCreateMask={handleCreateMask}
+              onDeleteMask={handleDeleteMask}
+              onSeek={handleSeek}
+            />
+          </div>
 
-      {/* Bottom Timeline & Scrubber */}
-      <Timeline
-        duration={duration}
-        currentTime={currentTime}
-        isPlaying={isPlaying}
-        onSeek={handleSeek}
-        onTogglePlay={handleTogglePlay}
-        masks={masks}
-        selectedMaskId={selectedMaskId}
-        onSelectMask={setSelectedMaskId}
-        onUpdateMask={handleUpdateMask}
-        onDeleteMask={handleDeleteMask}
-        playbackRate={playbackRate}
-        onChangePlaybackRate={handlePlaybackRateChange}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-      />
+          {/* Bottom Timeline with Local Video Trimmer & Scrubber */}
+          <Timeline
+            duration={duration}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            onSeek={handleSeek}
+            onTogglePlay={handleTogglePlay}
+            masks={masks}
+            selectedMaskId={selectedMaskId}
+            onSelectMask={setSelectedMaskId}
+            onUpdateMask={handleUpdateMask}
+            onDeleteMask={handleDeleteMask}
+            playbackRate={playbackRate}
+            onChangePlaybackRate={handlePlaybackRateChange}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+            trimRange={trimRange}
+            onUpdateTrimRange={setTrimRange}
+            isLoopingTrim={isLoopingTrim}
+            onToggleLoopTrim={() => {
+              const next = !isLoopingTrim;
+              setIsLoopingTrim(next);
+              if (next && videoRef.current) {
+                videoRef.current.currentTime = trimRange.start;
+                videoRef.current.play().catch(() => {});
+                setIsPlaying(true);
+              }
+            }}
+          />
+        </div>
+      )}
 
-      {/* Video Export Dialog */}
+      {/* Tab 2: YouTube Trimmer Mode */}
+      {activeTab === 'youtube' && (
+        <YoutubeTrimmerView onSendToRedactor={handleSendYoutubeClipToRedactor} />
+      )}
+
+      {/* Video Export Dialog for Editor */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
@@ -336,6 +433,8 @@ export function App() {
         exportedResult={exportedResult}
         onStartExport={handleStartExport}
         isExporting={isExporting}
+        currentTrimRange={trimRange}
+        videoDuration={duration}
       />
     </div>
   );

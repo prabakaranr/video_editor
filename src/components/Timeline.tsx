@@ -8,6 +8,9 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  Scissors,
+  RotateCcw,
+  Repeat,
 } from 'lucide-react';
 import type { RedactionMask } from '../types/editor';
 
@@ -26,6 +29,10 @@ interface TimelineProps {
   onChangePlaybackRate: (rate: number) => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  trimRange: { start: number; end: number };
+  onUpdateTrimRange: (range: { start: number; end: number }) => void;
+  isLoopingTrim: boolean;
+  onToggleLoopTrim: () => void;
 }
 
 // Formats seconds into MM:SS.ms
@@ -54,6 +61,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   onChangePlaybackRate,
   isMuted,
   onToggleMute,
+  trimRange,
+  onUpdateTrimRange,
+  isLoopingTrim,
+  onToggleLoopTrim,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -64,6 +75,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     initialStart: number;
     initialEnd: number;
   } | null>(null);
+
+  const [trimDragType, setTrimDragType] = useState<'start' | 'end' | null>(null);
 
   const safeDuration = duration > 0 ? duration : 10;
 
@@ -87,7 +100,18 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isScrubbing) {
+      if (trimDragType) {
+        const time = getTimeFromClientX(e.clientX);
+        if (trimDragType === 'start') {
+          const newStart = Math.max(0, Math.min(time, trimRange.end - 0.2));
+          onUpdateTrimRange({ ...trimRange, start: newStart });
+          onSeek(newStart);
+        } else if (trimDragType === 'end') {
+          const newEnd = Math.min(safeDuration, Math.max(time, trimRange.start + 0.2));
+          onUpdateTrimRange({ ...trimRange, end: newEnd });
+          onSeek(newEnd);
+        }
+      } else if (isScrubbing) {
         onSeek(getTimeFromClientX(e.clientX));
       } else if (clipDragState) {
         const currentT = getTimeFromClientX(e.clientX);
@@ -124,9 +148,10 @@ export const Timeline: React.FC<TimelineProps> = ({
     const handleMouseUp = () => {
       setIsScrubbing(false);
       setClipDragState(null);
+      setTrimDragType(null);
     };
 
-    if (isScrubbing || clipDragState) {
+    if (isScrubbing || clipDragState || trimDragType) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
@@ -134,33 +159,45 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [clipDragState, getTimeFromClientX, isScrubbing, onSeek, onUpdateMask, safeDuration]);
+  }, [
+    clipDragState,
+    getTimeFromClientX,
+    isScrubbing,
+    onSeek,
+    onUpdateMask,
+    onUpdateTrimRange,
+    safeDuration,
+    trimDragType,
+    trimRange,
+  ]);
 
-  // Handle setting In / Out points for currently selected mask
   const selectedMask = masks.find((m) => m.id === selectedMaskId);
 
-  const handleSetInPoint = () => {
-    if (selectedMask) {
-      onUpdateMask(selectedMask.id, {
-        startTime: Math.min(currentTime, selectedMask.endTime - 0.1),
-      });
+  // Set Trim Markers for local video
+  const handleSetTrimStart = () => {
+    if (currentTime < trimRange.end) {
+      onUpdateTrimRange({ ...trimRange, start: currentTime });
     }
   };
 
-  const handleSetOutPoint = () => {
-    if (selectedMask) {
-      onUpdateMask(selectedMask.id, {
-        endTime: Math.max(currentTime, selectedMask.startTime + 0.1),
-      });
+  const handleSetTrimEnd = () => {
+    if (currentTime > trimRange.start) {
+      onUpdateTrimRange({ ...trimRange, end: currentTime });
     }
   };
 
-  // Generate ruler tick marks
+  const handleResetTrim = () => {
+    onUpdateTrimRange({ start: 0, end: safeDuration });
+  };
+
   const numTicks = Math.ceil(safeDuration);
   const ticks = Array.from({ length: numTicks + 1 }, (_, i) => i);
 
+  const trimDuration = Math.max(0, trimRange.end - trimRange.start);
+  const isTrimActive = trimRange.start > 0.05 || trimRange.end < safeDuration - 0.05;
+
   return (
-    <div className="h-56 bg-neutral-900 border-t border-neutral-800 flex flex-col select-none">
+    <div className="h-64 bg-neutral-900 border-t border-neutral-800 flex flex-col select-none">
       {/* Control Toolbar */}
       <div className="h-11 px-4 border-b border-neutral-800 flex items-center justify-between text-xs text-neutral-300">
         {/* Playback Controls */}
@@ -198,33 +235,61 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
         </div>
 
-        {/* In/Out Trim Shortcuts for Active Redaction Clip */}
+        {/* Video Trimmer Quick Cues (For Local / Uploaded Video) */}
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-neutral-950/90 px-2.5 py-1 rounded-lg border border-neutral-800">
+            <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Trim Cut:</span>
+            </span>
+            <button
+              onClick={handleSetTrimStart}
+              className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-emerald-300 border border-neutral-700 transition"
+              title="Set Trim Start to current position"
+            >
+              [Start: {trimRange.start.toFixed(1)}s]
+            </button>
+            <button
+              onClick={handleSetTrimEnd}
+              className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-rose-300 border border-neutral-700 transition"
+              title="Set Trim End to current position"
+            >
+              [End: {trimRange.end.toFixed(1)}s]
+            </button>
+            <button
+              onClick={onToggleLoopTrim}
+              className={`p-1 rounded text-xs transition ${
+                isLoopingTrim
+                  ? 'bg-amber-500 text-black font-semibold'
+                  : 'hover:bg-neutral-800 text-neutral-400 hover:text-amber-400'
+              }`}
+              title="Loop playback inside trimmed region"
+            >
+              <Repeat className="w-3.5 h-3.5" />
+            </button>
+            {isTrimActive && (
+              <button
+                onClick={handleResetTrim}
+                className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
+                title="Reset trim range to full video"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <span className="text-[10px] font-mono text-neutral-400 pl-1">
+              Len: {trimDuration.toFixed(1)}s
+            </span>
+          </div>
+
+          {/* Mask Delete shortcut if mask selected */}
           {selectedMask && (
-            <div className="flex items-center gap-1.5 bg-neutral-950/80 px-2 py-1 rounded-md border border-neutral-800">
-              <span className="text-[10px] text-neutral-400 font-medium">Selected Clip Trim:</span>
-              <button
-                onClick={handleSetInPoint}
-                className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-neutral-200 border border-neutral-700"
-                title="Set Start Time of redaction to current playhead (Hotkey: I)"
-              >
-                Set [In]
-              </button>
-              <button
-                onClick={handleSetOutPoint}
-                className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-neutral-200 border border-neutral-700"
-                title="Set End Time of redaction to current playhead (Hotkey: O)"
-              >
-                Set [Out]
-              </button>
-              <button
-                onClick={() => onDeleteMask(selectedMask.id)}
-                className="p-1 rounded hover:bg-red-500/20 text-neutral-400 hover:text-red-400 transition"
-                title="Delete Selected Redaction Clip"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button
+              onClick={() => onDeleteMask(selectedMask.id)}
+              className="p-1.5 rounded hover:bg-red-500/20 text-neutral-400 hover:text-red-400 transition"
+              title="Delete Selected Redaction Clip"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           )}
 
           {/* Playback Rate Selector */}
@@ -257,10 +322,11 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="h-6 border-b border-neutral-800 px-3 flex items-center text-[10px] text-neutral-500 uppercase font-mono">
             Ruler
           </div>
-          <div className="h-10 border-b border-neutral-800/60 px-3 flex items-center text-neutral-300">
-            Video Track
+          <div className="h-12 border-b border-neutral-800/60 px-3 flex items-center justify-between text-neutral-300">
+            <span>Video Trim Track</span>
+            <Scissors className="w-3.5 h-3.5 text-emerald-400" />
           </div>
-          <div className="h-16 px-3 flex items-center justify-between text-sky-400">
+          <div className="h-18 px-3 flex items-center justify-between text-sky-400">
             <span>Redaction Clips</span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20">
               {masks.length}
@@ -294,18 +360,61 @@ export const Timeline: React.FC<TimelineProps> = ({
             })}
           </div>
 
-          {/* Track 1: Video Base Track */}
-          <div className="h-10 border-b border-neutral-800/60 relative bg-neutral-900/20 px-1 py-1">
-            <div className="w-full h-full rounded bg-neutral-800/80 border border-neutral-700 flex items-center px-3 text-[11px] text-neutral-400 font-mono">
-              Base Video Stream
+          {/* Track 1: Video Base Track with Interactive Cut / Trim Range */}
+          <div className="h-12 border-b border-neutral-800/60 relative bg-neutral-900/20 px-1 py-1">
+            <div className="relative w-full h-full rounded bg-neutral-900/90 border border-neutral-800 overflow-hidden flex items-center">
+              {/* Subtle filmstrip ticks */}
+              <div className="absolute inset-0 flex items-center justify-around opacity-15 pointer-events-none">
+                {Array.from({ length: 40 }).map((_, i) => (
+                  <div key={i} className="w-1 h-5 bg-neutral-400 rounded-sm" />
+                ))}
+              </div>
+
+              {/* Trim Highlight Section */}
+              <div
+                style={{
+                  left: `${(trimRange.start / safeDuration) * 100}%`,
+                  width: `${((trimRange.end - trimRange.start) / safeDuration) * 100}%`,
+                }}
+                className="absolute top-0 bottom-0 bg-emerald-500/20 border-y-2 border-emerald-400 flex items-center justify-between px-2 text-[10px] font-mono text-emerald-300 font-semibold pointer-events-none z-10"
+              >
+                <span>CUT START ({trimRange.start.toFixed(1)}s)</span>
+                <span>CUT END ({trimRange.end.toFixed(1)}s)</span>
+              </div>
+
+              {/* Left Trim Handle */}
+              <div
+                style={{ left: `${(trimRange.start / safeDuration) * 100}%` }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setTrimDragType('start');
+                }}
+                className="absolute top-0 bottom-0 w-3 -ml-1.5 bg-emerald-500 rounded-l cursor-ew-resize hover:bg-emerald-400 shadow-md flex items-center justify-center z-20 group"
+                title="Drag to adjust Trim Start point"
+              >
+                <div className="w-0.5 h-4 bg-black/60 rounded-full" />
+              </div>
+
+              {/* Right Trim Handle */}
+              <div
+                style={{ left: `${(trimRange.end / safeDuration) * 100}%` }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setTrimDragType('end');
+                }}
+                className="absolute top-0 bottom-0 w-3 -ml-1.5 bg-rose-500 rounded-r cursor-ew-resize hover:bg-rose-400 shadow-md flex items-center justify-center z-20 group"
+                title="Drag to adjust Trim End point"
+              >
+                <div className="w-0.5 h-4 bg-black/60 rounded-full" />
+              </div>
             </div>
           </div>
 
           {/* Track 2: Redaction Clips Track */}
-          <div className="h-20 relative bg-neutral-900/40 p-1">
+          <div className="h-24 relative bg-neutral-900/40 p-1">
             {masks.length === 0 ? (
               <div className="h-full flex items-center justify-center text-[11px] text-neutral-600 italic pointer-events-none">
-                No redactions active. Use "Scan Current Frame", "Draw Redaction Area", or add a manual mask.
+                No redactions created yet. Use "Scan Current Frame", "Draw Redaction Area", or add a mask.
               </div>
             ) : (
               masks.map((mask) => {

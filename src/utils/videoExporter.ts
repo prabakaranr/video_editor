@@ -8,16 +8,26 @@ export interface ExportProgress {
   phase: 'preparing' | 'rendering' | 'finalizing' | 'done';
 }
 
+export interface TrimRange {
+  start: number;
+  end: number;
+}
+
 export async function exportRedactedVideo(
   videoElement: HTMLVideoElement,
   masks: RedactionMask[],
-  onProgress: (progress: ExportProgress) => void
+  onProgress: (progress: ExportProgress) => void,
+  trimRange?: TrimRange
 ): Promise<{ blob: Blob; url: string; filename: string }> {
-  const duration = videoElement.duration || 10;
+  const videoDuration = videoElement.duration || 10;
+  const startSec = trimRange ? Math.max(0, trimRange.start) : 0;
+  const endSec = trimRange ? Math.min(videoDuration, trimRange.end) : videoDuration;
+  const exportDuration = Math.max(0.2, endSec - startSec);
+
   const width = videoElement.videoWidth || 1280;
   const height = videoElement.videoHeight || 720;
   const fps = 30;
-  const totalFrames = Math.max(1, Math.round(duration * fps));
+  const totalFrames = Math.max(1, Math.round(exportDuration * fps));
 
   onProgress({
     currentFrame: 0,
@@ -89,10 +99,11 @@ export async function exportRedactedVideo(
         const ext = selectedMime.includes('mp4') ? 'mp4' : 'webm';
         const blob = new Blob(chunks, { type: selectedMime });
         const url = URL.createObjectURL(blob);
+        const trimLabel = trimRange ? `_trimmed_[${startSec.toFixed(1)}s-${endSec.toFixed(1)}s]` : '';
         resolve({
           blob,
           url,
-          filename: `redacted_video_${Date.now()}.${ext}`,
+          filename: `redacted_video${trimLabel}_${Date.now()}.${ext}`,
         });
       };
       recorder.onerror = (err) => reject(err);
@@ -106,7 +117,6 @@ export async function exportRedactedVideo(
   const wasPaused = videoElement.paused;
   videoElement.pause();
 
-  // Helper function to seek and wait for frame
   const seekTo = (time: number): Promise<void> => {
     return new Promise((resolve) => {
       const onSeeked = () => {
@@ -114,13 +124,13 @@ export async function exportRedactedVideo(
         resolve();
       };
       videoElement.addEventListener('seeked', onSeeked);
-      videoElement.currentTime = Math.min(time, duration);
+      videoElement.currentTime = Math.min(time, videoDuration);
     });
   };
 
   try {
     for (let frame = 0; frame < totalFrames; frame++) {
-      const t = frame / fps;
+      const t = startSec + (frame / fps);
       await seekTo(t);
 
       // Draw original video frame
@@ -139,7 +149,6 @@ export async function exportRedactedVideo(
         phase: 'rendering',
       });
 
-      // Brief delay to allow stream to ingest frame
       await new Promise((r) => setTimeout(r, 1000 / fps));
     }
 
@@ -155,7 +164,6 @@ export async function exportRedactedVideo(
     recorder.stop();
     throw err;
   } finally {
-    // Restore previous state
     videoElement.currentTime = prevTime;
     if (!wasPaused) {
       videoElement.play().catch(() => {});

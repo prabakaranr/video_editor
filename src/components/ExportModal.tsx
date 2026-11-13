@@ -1,14 +1,16 @@
-import React from 'react';
-import { X, Download, CheckCircle2, Video, Sparkles, Loader2 } from 'lucide-react';
-import type { ExportProgress } from '../utils/videoExporter';
+import React, { useState } from 'react';
+import { X, Download, CheckCircle2, Video, Sparkles, Loader2, Scissors } from 'lucide-react';
+import type { ExportProgress, TrimRange } from '../utils/videoExporter';
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   progress: ExportProgress | null;
   exportedResult: { blob: Blob; url: string; filename: string } | null;
-  onStartExport: () => void;
+  onStartExport: (trimRange?: TrimRange) => void;
   isExporting: boolean;
+  currentTrimRange: TrimRange;
+  videoDuration: number;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -18,7 +20,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   exportedResult,
   onStartExport,
   isExporting,
+  currentTrimRange,
+  videoDuration,
 }) => {
+  const [exportScope, setExportScope] = useState<'trimmed' | 'full'>('trimmed');
+
   if (!isOpen) return null;
 
   const handleDownload = () => {
@@ -35,6 +41,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     ? (exportedResult.blob.size / (1024 * 1024)).toFixed(2)
     : null;
 
+  const trimmedLength = Math.max(0.1, currentTrimRange.end - currentTrimRange.start);
+
+  const handleTriggerExport = () => {
+    if (exportScope === 'trimmed') {
+      onStartExport(currentTrimRange);
+    } else {
+      onStartExport(undefined);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
       <div className="relative w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl overflow-hidden">
@@ -42,7 +58,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
           <div className="flex items-center gap-2">
             <Video className="w-5 h-5 text-sky-400" />
-            <h2 className="text-base font-semibold text-white">Export Redacted Video</h2>
+            <h2 className="text-base font-semibold text-white">Export Video & Privacy Redactions</h2>
           </div>
           <button
             onClick={onClose}
@@ -62,6 +78,51 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 blackout) permanently baked directly into the video frames. Audio tracks are preserved.
               </p>
 
+              {/* Trim Scope Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                  Export Time Range
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('trimmed')}
+                    className={`flex flex-col p-3 rounded-xl border text-left transition ${
+                      exportScope === 'trimmed'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-sm'
+                        : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold mb-1 text-emerald-400">
+                      <Scissors className="w-3.5 h-3.5" />
+                      <span>Trimmed Cut Only</span>
+                    </div>
+                    <div className="text-[11px] font-mono text-neutral-300">
+                      {currentTrimRange.start.toFixed(1)}s → {currentTrimRange.end.toFixed(1)}s ({trimmedLength.toFixed(1)}s)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('full')}
+                    className={`flex flex-col p-3 rounded-xl border text-left transition ${
+                      exportScope === 'full'
+                        ? 'bg-sky-500/10 border-sky-500 text-white shadow-sm'
+                        : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold mb-1 text-sky-400">
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Full Video</span>
+                    </div>
+                    <div className="text-[11px] font-mono text-neutral-300">
+                      00:00.0 → {videoDuration.toFixed(1)}s
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Export details */}
               <div className="rounded-xl bg-neutral-950 p-4 border border-neutral-800 space-y-2 text-xs">
                 <div className="flex justify-between text-neutral-400">
                   <span>Export Format:</span>
@@ -72,13 +133,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <span className="font-semibold text-emerald-400">100% In-Browser (Zero Cloud Upload)</span>
                 </div>
                 <div className="flex justify-between text-neutral-400">
-                  <span>Frame Rate:</span>
-                  <span className="font-mono text-white">30 FPS</span>
+                  <span>Target Range Duration:</span>
+                  <span className="font-mono text-white">
+                    {exportScope === 'trimmed' ? `${trimmedLength.toFixed(1)}s` : `${videoDuration.toFixed(1)}s`}
+                  </span>
                 </div>
               </div>
 
               <button
-                onClick={onStartExport}
+                onClick={handleTriggerExport}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-sky-500/20 active:scale-98 transition flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-4 h-4" />
@@ -124,7 +187,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">
                 <CheckCircle2 className="w-5 h-5 shrink-0" />
-                <span>Video Successfully Redacted & Encoded!</span>
+                <span>Video Successfully Processed & Ready!</span>
               </div>
 
               {/* Video Preview */}
