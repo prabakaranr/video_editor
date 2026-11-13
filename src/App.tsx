@@ -7,7 +7,7 @@ import { ExportModal } from './components/ExportModal';
 import { YoutubeTrimmerView } from './components/youtube/YoutubeTrimmerView';
 import type { RedactionMask, VideoInfo } from './types/editor';
 import { generateDemoVideo } from './utils/demoVideoGenerator';
-import { exportRedactedVideo, type ExportProgress, type TrimRange } from './utils/videoExporter';
+import { exportRedactedVideo, type ExportProgress, type TrimRange, type VideoExportOptions } from './utils/videoExporter';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'editor' | 'youtube'>('editor');
@@ -208,13 +208,15 @@ export function App() {
     }
   };
 
-  const handleToggleMute = () => {
-    if (videoRef.current) {
-      const nextMuted = !isMuted;
-      videoRef.current.muted = nextMuted;
-      setIsMuted(nextMuted);
-    }
-  };
+  const handleToggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (videoRef.current) {
+        videoRef.current.muted = next;
+      }
+      return next;
+    });
+  }, []);
 
   // Mask operations
   const handleCreateMask = useCallback((newMask: Omit<RedactionMask, 'id'>) => {
@@ -250,6 +252,9 @@ export function App() {
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
         handleSeek(currentTime + 1);
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        handleToggleMute();
       } else if ((e.code === 'Delete' || e.code === 'Backspace') && selectedMaskId) {
         e.preventDefault();
         handleDeleteMask(selectedMaskId);
@@ -271,13 +276,14 @@ export function App() {
     currentTime,
     handleDeleteMask,
     handleSeek,
+    handleToggleMute,
     handleTogglePlay,
     handleUpdateMask,
     selectedMaskId,
   ]);
 
   // Export handling
-  const handleStartExport = async (scopeTrimRange?: TrimRange) => {
+  const handleStartExport = async (options?: VideoExportOptions) => {
     if (!videoRef.current) return;
     try {
       setIsExporting(true);
@@ -287,7 +293,7 @@ export function App() {
         videoRef.current,
         masks,
         (prog) => setExportProgress(prog),
-        scopeTrimRange
+        options
       );
 
       setExportedResult(result);
@@ -371,6 +377,8 @@ export function App() {
               onTogglePlay={handleTogglePlay}
               isDrawMode={isDrawMode}
               setIsDrawMode={setIsDrawMode}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
             />
 
             {/* Right Redaction Sidebar */}
@@ -435,6 +443,7 @@ export function App() {
         isExporting={isExporting}
         currentTrimRange={trimRange}
         videoDuration={duration}
+        initialMute={isMuted}
       />
     </div>
   );

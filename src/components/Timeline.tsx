@@ -307,10 +307,15 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Mute Toggle */}
           <button
             onClick={onToggleMute}
-            className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
-            title={isMuted ? 'Unmute' : 'Mute'}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition shrink-0 ${
+              isMuted
+                ? 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30 font-semibold'
+                : 'bg-neutral-950 hover:bg-neutral-800 text-neutral-300 border-neutral-800 hover:text-white'
+            }`}
+            title={isMuted ? 'Unmute Audio (Hotkey: M)' : 'Mute Audio (Hotkey: M)'}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
+            <span className="text-[11px]">{isMuted ? 'Muted' : 'Audio On'}</span>
           </button>
         </div>
       </div>

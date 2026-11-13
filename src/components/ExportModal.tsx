@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { X, Download, CheckCircle2, Video, Sparkles, Loader2, Scissors } from 'lucide-react';
-import type { ExportProgress, TrimRange } from '../utils/videoExporter';
+import { X, Download, CheckCircle2, Video, Sparkles, Loader2, Scissors, VolumeX, Volume2 } from 'lucide-react';
+import type { ExportProgress, TrimRange, VideoExportOptions } from '../utils/videoExporter';
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   progress: ExportProgress | null;
   exportedResult: { blob: Blob; url: string; filename: string } | null;
-  onStartExport: (trimRange?: TrimRange) => void;
+  onStartExport: (options: VideoExportOptions) => void;
   isExporting: boolean;
   currentTrimRange: TrimRange;
   videoDuration: number;
+  initialMute?: boolean;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -22,8 +23,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   isExporting,
   currentTrimRange,
   videoDuration,
+  initialMute = false,
 }) => {
   const [exportScope, setExportScope] = useState<'trimmed' | 'full'>('trimmed');
+  const [muteAudio, setMuteAudio] = useState(initialMute);
 
   if (!isOpen) return null;
 
@@ -44,11 +47,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const trimmedLength = Math.max(0.1, currentTrimRange.end - currentTrimRange.start);
 
   const handleTriggerExport = () => {
-    if (exportScope === 'trimmed') {
-      onStartExport(currentTrimRange);
-    } else {
-      onStartExport(undefined);
-    }
+    onStartExport({
+      trimRange: exportScope === 'trimmed' ? currentTrimRange : undefined,
+      muteAudio,
+    });
   };
 
   return (
@@ -75,7 +77,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <div className="space-y-4">
               <p className="text-xs text-neutral-300 leading-relaxed">
                 Your video will be re-encoded client-side with all redaction masks (blur, pixelation,
-                blackout) permanently baked directly into the video frames. Audio tracks are preserved.
+                blackout) permanently baked directly into the video frames.
               </p>
 
               {/* Trim Scope Selector */}
@@ -122,6 +124,28 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </div>
               </div>
 
+              {/* Audio Mute Option */}
+              <div
+                onClick={() => setMuteAudio(!muteAudio)}
+                className="flex items-center justify-between p-3 rounded-xl bg-neutral-950 border border-neutral-800 cursor-pointer hover:border-neutral-700 transition"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-1.5 rounded-lg ${muteAudio ? 'bg-red-500/20 text-red-400' : 'bg-neutral-800 text-neutral-300'}`}>
+                    {muteAudio ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white">Mute Audio Track</div>
+                    <div className="text-[10px] text-neutral-400">Strip all audio from the exported file for maximum privacy</div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={muteAudio}
+                  onChange={(e) => setMuteAudio(e.target.checked)}
+                  className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                />
+              </div>
+
               {/* Export details */}
               <div className="rounded-xl bg-neutral-950 p-4 border border-neutral-800 space-y-2 text-xs">
                 <div className="flex justify-between text-neutral-400">
@@ -129,8 +153,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <span className="font-mono text-white">WebM / MP4 (H.264/VP9)</span>
                 </div>
                 <div className="flex justify-between text-neutral-400">
-                  <span>Privacy Level:</span>
-                  <span className="font-semibold text-emerald-400">100% In-Browser (Zero Cloud Upload)</span>
+                  <span>Audio Status:</span>
+                  <span className={`font-semibold ${muteAudio ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {muteAudio ? 'Muted (Audio Track Stripped)' : 'Preserved with Video'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-neutral-400">
                   <span>Target Range Duration:</span>

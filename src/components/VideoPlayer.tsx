@@ -1,5 +1,16 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, ShieldAlert, Plus } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  ShieldAlert,
+  Plus,
+  Volume2,
+  VolumeX,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Smartphone,
+} from 'lucide-react';
 import type { RedactionMask, VideoInfo } from '../types/editor';
 import { renderMaskOnContext } from '../utils/maskRenderer';
 
@@ -17,6 +28,8 @@ interface VideoPlayerProps {
   onTogglePlay: () => void;
   isDrawMode: boolean;
   setIsDrawMode: (active: boolean) => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
 }
 
 type DragType = 'move' | 'nw' | 'ne' | 'se' | 'sw' | 'n' | 's' | 'e' | 'w' | 'draw' | null;
@@ -35,8 +48,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onTogglePlay,
   isDrawMode,
   setIsDrawMode,
+  isMuted,
+  onToggleMute,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Zoom state (1 = 100% Fit, 1.25, 1.5, 2.0, 2.5)
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+
   const [dragState, setDragState] = useState<{
     type: DragType;
     startX: number;
@@ -44,6 +64,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     initialMask?: RedactionMask;
     currentBox?: { x: number; y: number; width: number; height: number };
   } | null>(null);
+
+  const isPortrait = videoInfo ? videoInfo.height > videoInfo.width : false;
 
   // Renders the video and active redactions continuously on the canvas
   useEffect(() => {
@@ -197,152 +219,266 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, getNormalizedCoords, isDrawMode, masks.length, onCreateMask, onUpdateMask, setIsDrawMode, videoRef]);
+  }, [
+    dragState,
+    getNormalizedCoords,
+    isDrawMode,
+    masks.length,
+    onCreateMask,
+    onUpdateMask,
+    setIsDrawMode,
+    videoRef,
+  ]);
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(2.5, +(prev + 0.25).toFixed(2)));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(0.75, +(prev - 0.25).toFixed(2)));
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+  };
+
+  // Dynamic aspect ratio calculation
+  const aspectRatioStyle = videoInfo && videoInfo.width && videoInfo.height
+    ? `${videoInfo.width} / ${videoInfo.height}`
+    : '16 / 9';
 
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 bg-neutral-950 flex flex-col items-center justify-center overflow-hidden p-4 select-none"
+      className="relative flex-1 bg-neutral-950 flex flex-col items-center justify-center overflow-hidden p-3 select-none"
       onClick={() => onSelectMask(null)}
     >
-      {/* Video Preview Canvas Wrapper */}
-      {videoInfo ? (
-        <div
-          className="relative max-w-full max-h-[calc(100vh-270px)] aspect-video rounded-xl overflow-hidden shadow-2xl shadow-black/80 border border-neutral-800 bg-black flex items-center justify-center group"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Main Rendering Canvas */}
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full object-contain cursor-crosshair"
-            onMouseDown={(e) => isDrawMode && handleMouseDown(e, 'draw')}
-          />
-
-          {/* Interactive Redaction Overlays */}
-          {masks.map((mask) => {
-            const isActive = currentTime >= mask.startTime && currentTime <= mask.endTime;
-            const isSelected = mask.id === selectedMaskId;
-
-            if (!isActive && !isSelected) return null;
-
-            return (
-              <div
-                key={mask.id}
-                style={{
-                  left: `${mask.x * 100}%`,
-                  top: `${mask.y * 100}%`,
-                  width: `${mask.width * 100}%`,
-                  height: `${mask.height * 100}%`,
-                }}
-                className={`absolute transition-colors pointer-events-auto ${
-                  isSelected
-                    ? isActive
-                      ? 'border-2 border-sky-400 bg-sky-500/10 shadow-lg shadow-sky-500/20 z-30'
-                      : 'border-2 border-dashed border-sky-400/50 bg-sky-500/5 opacity-60 z-20'
-                    : 'border border-dashed border-amber-400/80 bg-amber-400/5 hover:border-amber-300 z-20'
-                }`}
-                onMouseDown={(e) => handleMouseDown(e, 'move', mask)}
-              >
-                {/* Mask Type & Label Pill */}
-                <div className="absolute -top-6 left-0 flex items-center gap-1.5 px-2 py-0.5 rounded bg-neutral-900/90 border border-neutral-700 text-[10px] font-mono text-white whitespace-nowrap shadow select-none pointer-events-none">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-sky-400' : 'bg-neutral-500'}`} />
-                  <span className="font-semibold uppercase tracking-wider text-sky-300">
-                    {mask.type}
-                  </span>
-                  {mask.detectedText && (
-                    <span className="text-neutral-300 truncate max-w-[120px]">
-                      {mask.detectedText}
-                    </span>
-                  )}
-                  {!isActive && (
-                    <span className="text-amber-400 font-sans text-[9px] px-1 rounded bg-amber-400/10 border border-amber-400/30">
-                      Inactive @ {currentTime.toFixed(1)}s
-                    </span>
-                  )}
-                </div>
-
-                {/* Resize Handles (shown when selected) */}
-                {isSelected && (
-                  <>
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'nw', mask)}
-                      className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nwse-resize shadow"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'ne', mask)}
-                      className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nesw-resize shadow"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'sw', mask)}
-                      className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nesw-resize shadow"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'se', mask)}
-                      className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nwse-resize shadow"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'n', mask)}
-                      className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-sky-500 rounded-sm cursor-ns-resize"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 's', mask)}
-                      className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-sky-500 rounded-sm cursor-ns-resize"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'w', mask)}
-                      className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-4 bg-white border border-sky-500 rounded-sm cursor-ew-resize"
-                    />
-                    <div
-                      onMouseDown={(e) => handleMouseDown(e, 'e', mask)}
-                      className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-4 bg-white border border-sky-500 rounded-sm cursor-ew-resize"
-                    />
-                  </>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Active drawing box preview */}
-          {dragState?.type === 'draw' && dragState.currentBox && (
-            <div
-              style={{
-                left: `${dragState.currentBox.x * 100}%`,
-                top: `${dragState.currentBox.y * 100}%`,
-                width: `${dragState.currentBox.width * 100}%`,
-                height: `${dragState.currentBox.height * 100}%`,
-              }}
-              className="absolute border-2 border-sky-400 bg-sky-500/20 pointer-events-none z-40 rounded"
-            >
-              <div className="absolute -top-6 left-0 px-2 py-0.5 rounded bg-sky-600 text-[10px] font-mono text-white">
-                New Redaction Box
-              </div>
+      {/* Top Floating Info & Zoom Bar */}
+      {videoInfo && (
+        <div className="absolute top-3 left-4 right-4 flex items-center justify-between z-30 pointer-events-none">
+          {/* Portrait Video Badge */}
+          {isPortrait ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-lg backdrop-blur-md pointer-events-auto">
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Portrait Mode (Expanded Full-Height View)</span>
             </div>
+          ) : (
+            <div />
           )}
 
-          {/* Floating Canvas Quick Controls Bar */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900/85 backdrop-blur-md border border-neutral-700/80 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-30">
+          {/* Quick Zoom Bar */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-neutral-900/90 border border-neutral-700/80 shadow-xl backdrop-blur-md pointer-events-auto">
+            <span className="text-[10px] uppercase font-mono text-neutral-400 font-semibold px-1">
+              Zoom:
+            </span>
             <button
-              onClick={onTogglePlay}
-              className="p-1.5 rounded-lg hover:bg-neutral-800 text-white transition"
-              title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              onClick={handleZoomOut}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
+              title="Zoom Out (-)"
             >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
-
-            <div className="h-4 w-[1px] bg-neutral-700 mx-1" />
-
             <button
-              onClick={() => setIsDrawMode(!isDrawMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition ${
-                isDrawMode
-                  ? 'bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-500/30'
-                  : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700'
-              }`}
-              title="Click and drag over the video to draw a new redaction box"
+              onClick={handleResetZoom}
+              className="px-2 py-0.5 rounded hover:bg-neutral-800 text-[11px] font-mono font-bold text-sky-400 transition"
+              title="Reset Zoom to 100% Fit"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isDrawMode ? 'Drawing Area Active...' : 'Draw Redaction Area'}</span>
+              {Math.round(zoomLevel * 100)}%
             </button>
+            <button
+              onClick={handleZoomIn}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
+              title="Zoom In (+)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Video Preview Canvas Wrapper (Scrollable when zoomed) */}
+      {videoInfo ? (
+        <div
+          ref={scrollWrapperRef}
+          className="relative w-full h-full flex items-center justify-center overflow-auto p-2"
+        >
+          <div
+            style={{
+              aspectRatio: aspectRatioStyle,
+              transform: zoomLevel !== 1 ? `scale(${zoomLevel})` : undefined,
+              transformOrigin: 'center center',
+              transition: dragState ? 'none' : 'transform 0.15s ease-out',
+            }}
+            className="relative max-w-full max-h-[calc(100vh-270px)] h-full rounded-xl overflow-hidden shadow-2xl shadow-black/90 border border-neutral-800 bg-black flex items-center justify-center group shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Main Rendering Canvas */}
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full object-contain cursor-crosshair block"
+              onMouseDown={(e) => isDrawMode && handleMouseDown(e, 'draw')}
+            />
+
+            {/* Interactive Redaction Overlays */}
+            {masks.map((mask) => {
+              const isActive = currentTime >= mask.startTime && currentTime <= mask.endTime;
+              const isSelected = mask.id === selectedMaskId;
+
+              if (!isActive && !isSelected) return null;
+
+              return (
+                <div
+                  key={mask.id}
+                  style={{
+                    left: `${mask.x * 100}%`,
+                    top: `${mask.y * 100}%`,
+                    width: `${mask.width * 100}%`,
+                    height: `${mask.height * 100}%`,
+                  }}
+                  className={`absolute transition-colors pointer-events-auto ${
+                    isSelected
+                      ? isActive
+                        ? 'border-2 border-sky-400 bg-sky-500/10 shadow-lg shadow-sky-500/20 z-30'
+                        : 'border-2 border-dashed border-sky-400/50 bg-sky-500/5 opacity-60 z-20'
+                      : 'border border-dashed border-amber-400/80 bg-amber-400/5 hover:border-amber-300 z-20'
+                  }`}
+                  onMouseDown={(e) => handleMouseDown(e, 'move', mask)}
+                >
+                  {/* Mask Type & Label Pill */}
+                  <div className="absolute -top-6 left-0 flex items-center gap-1.5 px-2 py-0.5 rounded bg-neutral-900/90 border border-neutral-700 text-[10px] font-mono text-white whitespace-nowrap shadow select-none pointer-events-none">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isActive ? 'bg-sky-400' : 'bg-neutral-500'
+                      }`}
+                    />
+                    <span className="font-semibold uppercase tracking-wider text-sky-300">
+                      {mask.type}
+                    </span>
+                    {mask.detectedText && (
+                      <span className="text-neutral-300 truncate max-w-[120px]">
+                        {mask.detectedText}
+                      </span>
+                    )}
+                    {!isActive && (
+                      <span className="text-amber-400 font-sans text-[9px] px-1 rounded bg-amber-400/10 border border-amber-400/30">
+                        Inactive @ {currentTime.toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Resize Handles (shown when selected) */}
+                  {isSelected && (
+                    <>
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'nw', mask)}
+                        className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nwse-resize shadow"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'ne', mask)}
+                        className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nesw-resize shadow"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'sw', mask)}
+                        className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nesw-resize shadow"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'se', mask)}
+                        className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm cursor-nwse-resize shadow"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'n', mask)}
+                        className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-sky-500 rounded-sm cursor-ns-resize"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 's', mask)}
+                        className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-sky-500 rounded-sm cursor-ns-resize"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'w', mask)}
+                        className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-4 bg-white border border-sky-500 rounded-sm cursor-ew-resize"
+                      />
+                      <div
+                        onMouseDown={(e) => handleMouseDown(e, 'e', mask)}
+                        className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-4 bg-white border border-sky-500 rounded-sm cursor-ew-resize"
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Active drawing box preview */}
+            {dragState?.type === 'draw' && dragState.currentBox && (
+              <div
+                style={{
+                  left: `${dragState.currentBox.x * 100}%`,
+                  top: `${dragState.currentBox.y * 100}%`,
+                  width: `${dragState.currentBox.width * 100}%`,
+                  height: `${dragState.currentBox.height * 100}%`,
+                }}
+                className="absolute border-2 border-sky-400 bg-sky-500/20 pointer-events-none z-40 rounded"
+              >
+                <div className="absolute -top-6 left-0 px-2 py-0.5 rounded bg-sky-600 text-[10px] font-mono text-white">
+                  New Redaction Box
+                </div>
+              </div>
+            )}
+
+            {/* Floating Canvas Quick Controls Bar */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900/90 backdrop-blur-md border border-neutral-700/80 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-30">
+              {/* Play / Pause */}
+              <button
+                onClick={onTogglePlay}
+                className="p-1.5 rounded-lg hover:bg-neutral-800 text-white transition"
+                title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              >
+                {isPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4 fill-white" />
+                )}
+              </button>
+
+              {/* Mute Audio Toggle */}
+              <button
+                onClick={onToggleMute}
+                className={`p-1.5 rounded-lg transition ${
+                  isMuted
+                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                    : 'hover:bg-neutral-800 text-neutral-300 hover:text-white'
+                }`}
+                title={isMuted ? 'Unmute Audio (M)' : 'Mute Audio (M)'}
+              >
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+
+              <div className="h-4 w-[1px] bg-neutral-700 mx-0.5" />
+
+              {/* Draw Redaction Box */}
+              <button
+                onClick={() => setIsDrawMode(!isDrawMode)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition ${
+                  isDrawMode
+                    ? 'bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-500/30'
+                    : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700'
+                }`}
+                title="Click and drag over the video to draw a new redaction box"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isDrawMode ? 'Drawing...' : 'Draw Box'}</span>
+              </button>
+
+              {/* Reset Zoom Button */}
+              {zoomLevel !== 1 && (
+                <button
+                  onClick={handleResetZoom}
+                  className="p-1.5 rounded-lg hover:bg-neutral-800 text-sky-400 transition"
+                  title="Fit to Screen (100%)"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -353,8 +489,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
           <h2 className="text-lg font-semibold text-white mb-2">No Video Loaded</h2>
           <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-            Upload your video file to redact phone numbers, or click the button below to load our sample
-            compliance footage with realistic phone numbers to test.
+            Upload your video file (supports both landscape & vertical portrait smartphone recordings) to redact phone numbers, or click the sample button.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
             <button

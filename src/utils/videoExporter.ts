@@ -13,12 +13,20 @@ export interface TrimRange {
   end: number;
 }
 
+export interface VideoExportOptions {
+  trimRange?: TrimRange;
+  muteAudio?: boolean;
+}
+
 export async function exportRedactedVideo(
   videoElement: HTMLVideoElement,
   masks: RedactionMask[],
   onProgress: (progress: ExportProgress) => void,
-  trimRange?: TrimRange
+  options?: VideoExportOptions
 ): Promise<{ blob: Blob; url: string; filename: string }> {
+  const trimRange = options?.trimRange;
+  const muteAudio = options?.muteAudio ?? false;
+
   const videoDuration = videoElement.duration || 10;
   const startSec = trimRange ? Math.max(0, trimRange.start) : 0;
   const endSec = trimRange ? Math.min(videoDuration, trimRange.end) : videoDuration;
@@ -46,19 +54,21 @@ export async function exportRedactedVideo(
   const canvasStream = canvas.captureStream(fps);
   const combinedTracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
 
-  // Attempt audio track capture if present
-  try {
-    // @ts-expect-error captureStream is supported on HTMLMediaElement in Chromium
-    if (typeof videoElement.captureStream === 'function') {
-      // @ts-expect-error browser method
-      const videoStream: MediaStream = videoElement.captureStream();
-      const audioTracks = videoStream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        combinedTracks.push(audioTracks[0]);
+  // Attempt audio track capture if not muted
+  if (!muteAudio) {
+    try {
+      // @ts-expect-error captureStream is supported on HTMLMediaElement in Chromium
+      if (typeof videoElement.captureStream === 'function') {
+        // @ts-expect-error browser method
+        const videoStream: MediaStream = videoElement.captureStream();
+        const audioTracks = videoStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          combinedTracks.push(audioTracks[0]);
+        }
       }
+    } catch (e) {
+      console.warn('Audio capture not available, exporting video without audio track', e);
     }
-  } catch (e) {
-    console.warn('Audio capture not available, exporting video without audio track', e);
   }
 
   const combinedStream = new MediaStream(combinedTracks);
@@ -100,10 +110,11 @@ export async function exportRedactedVideo(
         const blob = new Blob(chunks, { type: selectedMime });
         const url = URL.createObjectURL(blob);
         const trimLabel = trimRange ? `_trimmed_[${startSec.toFixed(1)}s-${endSec.toFixed(1)}s]` : '';
+        const muteLabel = muteAudio ? '_muted' : '';
         resolve({
           blob,
           url,
-          filename: `redacted_video${trimLabel}_${Date.now()}.${ext}`,
+          filename: `redacted_video${trimLabel}${muteLabel}_${Date.now()}.${ext}`,
         });
       };
       recorder.onerror = (err) => reject(err);
