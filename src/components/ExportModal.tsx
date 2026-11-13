@@ -27,6 +27,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [exportScope, setExportScope] = useState<'trimmed' | 'full'>('trimmed');
   const [muteAudio, setMuteAudio] = useState(initialMute);
+  const [qualityBitrate, setQualityBitrate] = useState<number>(14_000_000); // Default to 14 Mbps (Ultra crisp)
 
   if (!isOpen) return null;
 
@@ -50,6 +51,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     onStartExport({
       trimRange: exportScope === 'trimmed' ? currentTrimRange : undefined,
       muteAudio,
+      bitrate: qualityBitrate,
     });
   };
 
@@ -72,7 +74,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-4">
           {!isExporting && !exportedResult && (
             <div className="space-y-4">
               <p className="text-xs text-neutral-300 leading-relaxed">
@@ -124,6 +126,58 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </div>
               </div>
 
+              {/* Video Quality / Text Sharpness Selector */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                    Video Sharpness & Quality
+                  </label>
+                  <span className="text-[10px] font-mono text-sky-400">
+                    {qualityBitrate >= 14_000_000 ? 'Ultra Sharp (14 Mbps)' : qualityBitrate >= 9_000_000 ? 'High (9 Mbps)' : 'Standard (5 Mbps)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQualityBitrate(14_000_000)}
+                    className={`p-2 rounded-xl border text-center transition ${
+                      qualityBitrate === 14_000_000
+                        ? 'bg-sky-500/15 border-sky-400 text-white font-semibold'
+                        : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-xs">Ultra Sharp</div>
+                    <div className="text-[9px] text-neutral-400 mt-0.5">Best for text & numbers</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setQualityBitrate(9_000_000)}
+                    className={`p-2 rounded-xl border text-center transition ${
+                      qualityBitrate === 9_000_000
+                        ? 'bg-sky-500/15 border-sky-400 text-white font-semibold'
+                        : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-xs">High Quality</div>
+                    <div className="text-[9px] text-neutral-400 mt-0.5">Balanced crispness</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setQualityBitrate(5_000_000)}
+                    className={`p-2 rounded-xl border text-center transition ${
+                      qualityBitrate === 5_000_000
+                        ? 'bg-sky-500/15 border-sky-400 text-white font-semibold'
+                        : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-xs">Standard</div>
+                    <div className="text-[9px] text-neutral-400 mt-0.5">Smaller file size</div>
+                  </button>
+                </div>
+              </div>
+
               {/* Audio Mute Option */}
               <div
                 onClick={() => setMuteAudio(!muteAudio)}
@@ -147,21 +201,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               {/* Export details */}
-              <div className="rounded-xl bg-neutral-950 p-4 border border-neutral-800 space-y-2 text-xs">
+              <div className="rounded-xl bg-neutral-950 p-3.5 border border-neutral-800 space-y-1.5 text-xs">
                 <div className="flex justify-between text-neutral-400">
                   <span>Export Format:</span>
-                  <span className="font-mono text-white">WebM / MP4 (H.264/VP9)</span>
+                  <span className="font-mono text-white">WebM / MP4 (Native Resolution)</span>
+                </div>
+                <div className="flex justify-between text-neutral-400">
+                  <span>Text Sharpness:</span>
+                  <span className="font-semibold text-emerald-400">Native Resolution + High-Bitrate Re-encoding</span>
                 </div>
                 <div className="flex justify-between text-neutral-400">
                   <span>Audio Status:</span>
                   <span className={`font-semibold ${muteAudio ? 'text-red-400' : 'text-emerald-400'}`}>
                     {muteAudio ? 'Muted (Audio Track Stripped)' : 'Preserved with Video'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-neutral-400">
-                  <span>Target Range Duration:</span>
-                  <span className="font-mono text-white">
-                    {exportScope === 'trimmed' ? `${trimmedLength.toFixed(1)}s` : `${videoDuration.toFixed(1)}s`}
                   </span>
                 </div>
               </div>

@@ -16,6 +16,7 @@ export interface TrimRange {
 export interface VideoExportOptions {
   trimRange?: TrimRange;
   muteAudio?: boolean;
+  bitrate?: number; // e.g. 12_000_000 for high quality
 }
 
 export async function exportRedactedVideo(
@@ -26,12 +27,15 @@ export async function exportRedactedVideo(
 ): Promise<{ blob: Blob; url: string; filename: string }> {
   const trimRange = options?.trimRange;
   const muteAudio = options?.muteAudio ?? false;
+  // Default to 12 Mbps for crisp text & near-lossless phone recording quality
+  const targetBitrate = options?.bitrate || 12_000_000;
 
   const videoDuration = videoElement.duration || 10;
   const startSec = trimRange ? Math.max(0, trimRange.start) : 0;
   const endSec = trimRange ? Math.min(videoDuration, trimRange.end) : videoDuration;
   const exportDuration = Math.max(0.2, endSec - startSec);
 
+  // Use full native resolution of original video
   const width = videoElement.videoWidth || 1280;
   const height = videoElement.videoHeight || 720;
   const fps = 30;
@@ -49,6 +53,9 @@ export async function exportRedactedVideo(
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Could not create canvas context');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // Video track from canvas
   const canvasStream = canvas.captureStream(fps);
@@ -89,7 +96,7 @@ export async function exportRedactedVideo(
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType: selectedMime,
-    videoBitsPerSecond: 4000000,
+    videoBitsPerSecond: targetBitrate,
   });
 
   const chunks: Blob[] = [];
@@ -144,7 +151,7 @@ export async function exportRedactedVideo(
       const t = startSec + (frame / fps);
       await seekTo(t);
 
-      // Draw original video frame
+      // Draw original video frame at native resolution with high-fidelity smoothing
       ctx.drawImage(videoElement, 0, 0, width, height);
 
       // Apply each redaction mask active at timestamp t
