@@ -52,6 +52,24 @@
 
 ---
 
+## 🔒 Privacy & Client-Side Processing
+
+- **100% In-Browser Execution**: All video redacting, optical character recognition (OCR), canvas blurring/pixelation, and rendering occur strictly on your local machine using Web APIs and HTML5 Canvas.
+- **Zero Cloud Storage**: Your personal video files, contacts, and sensitive telephone numbers are **never** uploaded to any external server or third-party cloud service.
+
+---
+
+## ⚖️ Legal Disclaimer & Terms of Service Notice
+
+This software is developed and distributed for **educational, privacy protection, and fair-use video editing purposes**.
+
+1. **Compliance & Privacy**: RedactVision is designed to assist creators and organizations in complying with privacy laws (such as GDPR, CCPA, and HIPAA) by removing personally identifiable information (PII) before publication.
+2. **YouTube Terms of Service**: When using the optional YouTube trimming component, users are solely responsible for ensuring compliance with [YouTube's Terms of Service](https://www.youtube.com/t/terms), applicable copyright laws, and intellectual property rights.
+3. **Authorized Content**: This tool should only be used on videos you own, public domain works, Creative Commons media, or content for which you have received express permission from the copyright owner.
+4. **No Warranty**: The software is provided "as is", without warranty of any kind. The authors and maintainers disclaim any liability for improper, unauthorized, or unlawful use of this tool.
+
+---
+
 ## ⌨️ Keyboard Shortcuts (Editor Mode)
 
 | Shortcut | Action |
@@ -76,4 +94,19 @@ This runs concurrently:
 - **Backend API**: `http://localhost:5000` (yt-dlp and FFmpeg discovery)
 - **Frontend App**: `http://localhost:5173` (Vite + React)
 
+### Or Run Separately
+```bash
+# Terminal 1: Backend server
+npm run server
+
+# Terminal 2: Vite dev client
+npm run dev
+```
+
 Visit **[http://localhost:5173/](http://localhost:5173/)** in your browser.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details.
